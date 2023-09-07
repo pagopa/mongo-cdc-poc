@@ -32,7 +32,15 @@ export const getMongoCollection = <T = Document>(
   collectionName: string
 ): TE.TaskEither<Error, Collection<T>> =>
   TE.tryCatch(
-    async () => db.collection<T>(collectionName),
+    async () => {
+      const collections = await db
+        .listCollections({ name: collectionName })
+        .toArray();
+      if (collections.length === 0) {
+        return db.createCollection<T>(collectionName);
+      }
+      return db.collection(collectionName);
+    },
     (reason) =>
       new Error(
         `Impossible to connect to Get the ${collectionName} collection: " ${reason}`
@@ -51,7 +59,16 @@ export const watchMongoCollection = <T = Document>(
   collection: Collection<T>
 ): TE.TaskEither<Error, ChangeStream<T, ChangeStreamDocument<T>>> =>
   TE.tryCatch(
-    async () => collection.watch(),
+    async () =>
+      collection.watch(
+        [
+          {
+            $match: { operationType: { $in: ["insert", "update", "replace"] } },
+          },
+          { $project: { _id: 1, fullDocument: 1, ns: 1, documentKey: 1 } },
+        ],
+        { fullDocument: "updateLookup" }
+      ),
     (reason) =>
       new Error(
         `Impossible to watch the ${collection.namespace} collection: " ${reason}`

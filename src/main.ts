@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 import {
   AzureEventhubSasFromString,
   KafkaProducerCompact,
@@ -27,6 +26,9 @@ import {
 } from "./mongo/mongoOperation";
 
 dotenv.config();
+
+const databaseName = "mongo-cdc-poc-mongodb";
+const collectionName = "students";
 
 const getCosmosConnectionURI = (): TE.TaskEither<Error, string> =>
   pipe(
@@ -65,7 +67,6 @@ export const log = withLogger(IO.io)(C.log);
 const waitForExit = (client: MongoClient): TE.TaskEither<Error, void> =>
   TE.tryCatch(
     async () => {
-      console.log("waiting");
       process.stdin.resume();
       process.on("SIGINT", () => {
         disconnectMongo(client);
@@ -84,15 +85,17 @@ const exitFromProcess = (): TE.TaskEither<Error, void> =>
 const sendMessageEventHub =
   (messagingClient: KafkaProducerCompact<Student>) =>
   <T = Document>(change: ChangeStreamDocument<T>): void =>
-    pipe(change, transform, void sendMessages(messagingClient));
+    void pipe(change, transform, (students) =>
+      sendMessages(messagingClient)(students)()
+    );
 
 const main = () =>
   pipe(
     TE.Do,
     getCosmosConnectionURI,
     TE.bind("client", (connectionUri) => mongoConnect(connectionUri)),
-    TE.bind("db", ({ client }) => getMongoDb(client, "customer")),
-    TE.bind("collection", ({ db }) => getMongoCollection(db, "students")),
+    TE.bind("db", ({ client }) => getMongoDb(client, databaseName)),
+    TE.bind("collection", ({ db }) => getMongoCollection(db, collectionName)),
     TE.bind("messagingClient", () => getEventHubProducer()),
     TE.chainFirst(({ collection, messagingClient }) =>
       pipe(
@@ -119,4 +122,6 @@ const main = () =>
     TE.orElse(exitFromProcess)
   )();
 
-void main();
+main()
+  .catch((err) => log(() => "Error: " + String(err)))
+  .finally(() => log(() => "Exiting..."));

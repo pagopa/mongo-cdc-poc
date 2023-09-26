@@ -14,9 +14,7 @@ module.exports = {
     {
       files: ["*.ts", "*.tsx"],
       extends: [
-        "@pagopa/eslint-config/recommended",
-        "plugin:prettier/recommended",
-        "eslint:reccomended"
+        "@pagopa/eslint-config/recommended"
       ],
       parserOptions: {
         project: ["./tsconfig.json"]

@@ -5,7 +5,7 @@ import {
   AzureEventhubSasFromString,
   KafkaProducerCompact,
   fromSas,
-  sendMessages
+  sendMessages,
 } from "@pagopa/fp-ts-kafkajs/dist/lib/KafkaProducerCompact";
 import { defaultLog, useWinston, withConsole } from "@pagopa/winston-ts";
 import dotenv from "dotenv";
@@ -27,7 +27,7 @@ import {
   mongoConnect,
   mongoInsertOne,
   setMongoListenerOnEventChange,
-  watchMongoCollection
+  watchMongoCollection,
 } from "./mongo/mongoOperation";
 
 dotenv.config();
@@ -40,9 +40,9 @@ export const resumeToken = "resumeToken";
 const getCosmosConnectionURI = (): TE.TaskEither<Error, string> =>
   pipe(
     CosmosDBConfig.decode(MONGO_CONFIG),
-    E.map(config => config.CONNECTION_URI),
+    E.map((config) => config.CONNECTION_URI),
     TE.fromEither,
-    TE.mapLeft(errors =>
+    TE.mapLeft((errors) =>
       pipe(
         defaultLog.taskEither.error(
           `Error during decoding Cosmos ConnectionURI - ${errors}`
@@ -58,9 +58,9 @@ const getEventHubProducer = (): TE.TaskEither<
 > =>
   pipe(
     AzureEventhubSasFromString.decode(EH_CONFIG.CONNECTION_STRING),
-    E.map(sas => fromSas<Student>(sas)),
+    E.map((sas) => fromSas<Student>(sas)),
     TE.fromEither,
-    TE.mapLeft(errors =>
+    TE.mapLeft((errors) =>
       pipe(
         defaultLog.taskEither.error(
           `Error during decoding Cosmos ConnectionURI - ${errors}`
@@ -72,10 +72,10 @@ const getEventHubProducer = (): TE.TaskEither<
 
 const simulateAsyncPause: TE.TaskEither<Error, void> = TE.tryCatch(
   () =>
-    new Promise<void>(resolve => {
+    new Promise<void>((resolve) => {
       setTimeout(() => resolve(), 1000);
     }),
-  error =>
+  (error) =>
     pipe(
       defaultLog.taskEither.error(`Error during pause simulation - ${error}`),
       () => new Error("An error occurred")
@@ -90,7 +90,7 @@ const waitForExit = (client: MongoClient): TE.TaskEither<Error, void> =>
         pipe(disconnectMongo(client), process.exit(0));
       });
     },
-    reason =>
+    (reason) =>
       pipe(
         defaultLog.taskEither.error(
           `Failed to set exit handler: ${String(reason)}`
@@ -108,10 +108,10 @@ const sendMessageEventHub =
     void pipe(
       change,
       transform,
-      students => sendMessages(messagingClient)(students)(),
+      (students) => sendMessages(messagingClient)(students)(),
       mongoInsertOne(db.collection(resumeToken), {
         // eslint-disable-next-line no-underscore-dangle
-        resumeToken: JSON.stringify((change._id as Id)._data)
+        resumeToken: JSON.stringify((change._id as Id)._data),
       })
     );
 
@@ -148,7 +148,7 @@ const main = () =>
     TE.Do,
     getCosmosConnectionURI,
     defaultLog.taskEither.info("Connecting to mongo..."),
-    TE.bind("client", connectionUri => mongoConnect(connectionUri)),
+    TE.bind("client", (connectionUri) => mongoConnect(connectionUri)),
     TE.bind("db", ({ client }) => getMongoDb(client, databaseName)),
     TE.bind("collection", ({ db }) => getMongoCollection(db, collectionName)),
     defaultLog.taskEither.info(
@@ -165,14 +165,14 @@ const main = () =>
     TE.chainFirst(({ db, collection, messagingClient }) =>
       pipe(
         findLastToken(db.collection("resumeToken")),
-        TE.chain(resumeToken =>
+        TE.chain((resumeToken) =>
           watchMongoCollection(
             collection,
             // eslint-disable-next-line no-underscore-dangle
             resumeToken.resumeToken
           )
         ),
-        TE.chain(watcher =>
+        TE.chain((watcher) =>
           setMongoListenerOnEventChange(
             watcher,
             sendMessageEventHub(messagingClient, db)
@@ -181,8 +181,8 @@ const main = () =>
       )
     ),
     defaultLog.taskEither.info(`Watching the collection ${collectionName}`),
-    TE.chainFirst(_ => simulateAsyncPause),
-    TE.chainFirst(_ => simulateAsyncPause),
+    TE.chainFirst((_) => simulateAsyncPause),
+    TE.chainFirst((_) => simulateAsyncPause),
     TE.chain(({ client }) => waitForExit(client)),
     TE.orElse(exitFromProcess)
   )();

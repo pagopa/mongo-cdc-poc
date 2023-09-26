@@ -9,15 +9,14 @@ import {
   Document,
   InsertOneResult,
   MongoClient,
-  OptionalUnlessRequiredId,
+  OptionalUnlessRequiredId
 } from "mongodb";
 import { ResumeToken } from "../model/resumeToken";
 
 export const mongoConnect = (uri: string): TE.TaskEither<Error, MongoClient> =>
   TE.tryCatch(
     () => MongoClient.connect(uri),
-    (reason) =>
-      new Error(`Impossible to connect to MongoDB: " ${String(reason)}`)
+    reason => new Error(`Impossible to connect to MongoDB: " ${String(reason)}`)
   );
 
 export const getMongoDb = (
@@ -26,7 +25,7 @@ export const getMongoDb = (
 ): TE.TaskEither<Error, Db> =>
   TE.tryCatch(
     async () => client.db(dbName),
-    (reason) =>
+    reason =>
       new Error(`Impossible to connect to Get the ${dbName} db: " ${reason}`)
   );
 
@@ -44,7 +43,7 @@ export const getMongoCollection = <T = Document>(
       }
       return db.collection(collectionName);
     },
-    (reason) =>
+    reason =>
       new Error(
         `Impossible to connect to Get the ${collectionName} collection: " ${reason}`
       )
@@ -55,7 +54,7 @@ export const disconnectMongo = (
 ): TE.TaskEither<Error, void> =>
   TE.tryCatch(
     async () => client.close(),
-    (reason) => new Error(`Impossible to close the mongo client: " ${reason}`)
+    reason => new Error(`Impossible to close the mongo client: " ${reason}`)
   );
 
 export const watchMongoCollection = <T = Document>(
@@ -68,30 +67,30 @@ export const watchMongoCollection = <T = Document>(
       let params:
         | { fullDocument: string }
         | { fullDocument: string; resumeAfter: { _data: unknown } } = {
-        fullDocument: "updateLookup",
+        fullDocument: "updateLookup"
       };
 
       if (resumeToken !== undefined) {
         params = {
           ...params,
           resumeAfter: {
-            _data: new Binary(Buffer.from(resumeToken, "base64")),
-          },
+            _data: new Binary(Buffer.from(resumeToken, "base64"))
+          }
         };
       }
       return collection.watch(
         [
           {
             $match: {
-              operationType: { $in: ["insert", "update", "replace"] },
-            },
+              operationType: { $in: ["insert", "update", "replace"] }
+            }
           },
-          { $project: { _id: 1, fullDocument: 1, ns: 1, documentKey: 1 } },
+          { $project: { _id: 1, fullDocument: 1, ns: 1, documentKey: 1 } }
         ],
         params
       );
     },
-    (reason) =>
+    reason =>
       new Error(
         `Impossible to watch the ${collection.namespace} collection: " ${reason}`
       )
@@ -112,9 +111,9 @@ export const findLastToken = <T>(
       }
       return null;
     },
-    (reason) =>
+    reason =>
       new Error(
-        `Impossible to get the last inserted document from collection: " ${reason}`
+        `Unable to get the last inserted document from collection: " ${reason}`
       )
   );
 
@@ -124,7 +123,7 @@ export const setMongoListenerOnEventChange = <T = Document>(
 ): TE.TaskEither<Error, ChangeStream<T, ChangeStreamDocument<T>>> =>
   TE.tryCatch(
     async () => changeStream.on("change", listener),
-    (reason) => new Error(`Impossible to set the listener: " ${reason}`)
+    reason => new Error(`Impossible to set the listener: " ${reason}`)
   );
 
 export const mongoInsertOne = <T>(
@@ -133,5 +132,5 @@ export const mongoInsertOne = <T>(
 ): TE.TaskEither<Error, InsertOneResult<T>> =>
   TE.tryCatch(
     () => collection.insertOne(doc),
-    (reason) => new Error(String(reason))
+    reason => new Error(String(reason))
   );

@@ -3,8 +3,6 @@
     "**/.yarn": true,
     "**/.pnp.*": true
   },
-  "eslint.nodePath": ".yarn/sdks",
-  "prettier.prettierPath": ".yarn/sdks/prettier/index.js",
-  "appService.defaultWebAppToDeploy": "/subscriptions/a4e96bcd-59dc-4d66-b2f7-5547ad157c12/resourceGroups/mongo-cdc-poc-rg/providers/Microsoft.Web/sites/cdc-mongo-app",
+  "appService.defaultWebAppToDeploy": "RESOURCE_ID_OF_YOUR_WEB_APP",
   "appService.deploySubpath": "."
 }

@@ -1,4 +1,6 @@
 /* eslint-disable no-console */
+import * as http from "http";
+
 import {
   AzureEventhubSasFromString,
   KafkaProducerCompact,
@@ -7,15 +9,25 @@ import {
 } from "@pagopa/fp-ts-kafkajs/dist/lib/KafkaProducerCompact";
 import { defaultLog, useWinston, withConsole } from "@pagopa/winston-ts";
 import dotenv from "dotenv";
+import express, { Request, Response } from "express";
 import * as E from "fp-ts/Either";
 import * as TE from "fp-ts/lib/TaskEither";
 import { pipe } from "fp-ts/lib/function";
-import { ChangeStreamDocument, MongoClient } from "mongodb";
+import {
+  ConsumerConfig,
+  EachMessagePayload,
+  Kafka,
+  KafkaConfig,
+} from "kafkajs";
+import { ChangeStreamDocument, Db, MongoClient } from "mongodb";
 import { CosmosDBConfig, EH_CONFIG, MONGO_CONFIG } from "./config/config";
 import { transform } from "./mapper/students";
 import { Student } from "./model/student";
+
+import { Id } from "./model/resumeToken";
 import {
   disconnectMongo,
+  findLastToken,
   getMongoCollection,
   getMongoDb,
   mongoConnect,
@@ -29,6 +41,7 @@ useWinston(withConsole());
 
 const databaseName = "mongo-cdc-poc-mongodb";
 const collectionName = "students";
+export const resumeToken = "resumeToken";
 
 const getCosmosConnectionURI = (): TE.TaskEither<Error, string> =>
   pipe(
@@ -96,12 +109,44 @@ const exitFromProcess = (): TE.TaskEither<Error, void> =>
   pipe(defaultLog.taskEither.error(`Application failed`), process.exit(1));
 
 const sendMessageEventHub =
-  (messagingClient: KafkaProducerCompact<Student>) =>
+  (messagingClient: KafkaProducerCompact<Student>, db: Db) =>
   <T = Document>(change: ChangeStreamDocument<T>): void =>
-    void pipe(change, transform, (students) =>
-      sendMessages(messagingClient)(students)()
+    void pipe(
+      change,
+      transform,
+      (students) => sendMessages(messagingClient)(students)(),
+      mongoInsertOne(db.collection(resumeToken), {
+        // eslint-disable-next-line no-underscore-dangle
+        resumeToken: JSON.stringify((change._id as Id)._data),
+      })
     );
 
+const app = express();
+
+app.get("/", (req: Request, res: Response) => async () => {
+  const config: ConsumerConfig = {
+    groupId: "",
+  };
+  const kafkaConfig: KafkaConfig = {
+    brokers: [],
+  };
+  const consumer = new Kafka(kafkaConfig).consumer(config);
+  await consumer.connect();
+  // eslint-disable-next-line functional/no-let
+  let messages: string[] = [];
+  await consumer.run({
+    eachMessage: async ({ topic, partition, message }: EachMessagePayload) => {
+      console.log({
+        value: message.value?.toString(),
+        topic,
+        partition,
+      });
+      messages = [...messages, message.value?.toString()];
+    },
+  });
+  await consumer.disconnect();
+  return res.status(200).send({ "Messages Read": messages });
+});
 const main = () =>
   pipe(
     TE.Do,
@@ -117,38 +162,42 @@ const main = () =>
       "Trying to connect to the event hub instance..."
     ),
     TE.bind("messagingClient", () => getEventHubProducer()),
-    defaultLog.taskEither.info("Connectied to event hub"),
+    defaultLog.taskEither.info("Connected to event hub"),
     defaultLog.taskEither.info(
       `Trying to watch the collection ${collectionName}`
     ),
-    TE.chainFirst(({ collection, messagingClient }) =>
+    TE.chainFirst(({ db, collection, messagingClient }) =>
       pipe(
-        watchMongoCollection(collection),
+        findLastToken(db.collection("resumeToken")),
+        TE.chain((resumeToken) =>
+          watchMongoCollection(
+            collection,
+            // eslint-disable-next-line no-underscore-dangle
+            resumeToken.resumeToken
+          )
+        ),
         TE.chain((watcher) =>
           setMongoListenerOnEventChange(
             watcher,
-            sendMessageEventHub(messagingClient)
+            sendMessageEventHub(messagingClient, db)
           )
         )
       )
     ),
     defaultLog.taskEither.info(`Watching the collection ${collectionName}`),
     TE.chainFirst((_) => simulateAsyncPause),
-    defaultLog.taskEither.info(`Inserting one document as example...`),
-    TE.chainFirst((collection) =>
-      mongoInsertOne(collection.collection, {
-        id: `${Math.floor(Math.random() * 1000)}`,
-        firstName: `name${Math.floor(Math.random() * 1000)}`,
-        lastName: `surname${Math.floor(Math.random() * 1000)}`,
-        dateOfBirth: new Date(),
-      })
-    ),
-    defaultLog.taskEither.info(
-      `Document inserted - Press CTRL+C to exit...Waiting...`
-    ),
     TE.chainFirst((_) => simulateAsyncPause),
     TE.chain(({ client }) => waitForExit(client)),
     TE.orElse(exitFromProcess)
   )();
 
-main().catch(console.error).finally(console.log);
+main()
+  .catch(console.error)
+  .finally(() => {
+    const server = http.createServer(app).listen(8080, () => {
+      console.log("Listening on port %d", 8080);
+    });
+    server.on("close", () => {
+      app.emit("server:stop");
+    });
+  });

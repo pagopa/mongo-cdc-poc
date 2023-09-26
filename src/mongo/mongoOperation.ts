@@ -1,5 +1,7 @@
+/* eslint-disable no-console */
 import * as TE from "fp-ts/TaskEither";
 import {
+  Binary,
   ChangeStream,
   ChangeStreamDocument,
   Collection,
@@ -9,6 +11,7 @@ import {
   MongoClient,
   OptionalUnlessRequiredId,
 } from "mongodb";
+import { ResumeToken } from "../model/resumeToken";
 
 export const mongoConnect = (uri: string): TE.TaskEither<Error, MongoClient> =>
   TE.tryCatch(
@@ -56,22 +59,62 @@ export const disconnectMongo = (
   );
 
 export const watchMongoCollection = <T = Document>(
-  collection: Collection<T>
+  collection: Collection<T>,
+  resumeToken: string
 ): TE.TaskEither<Error, ChangeStream<T, ChangeStreamDocument<T>>> =>
   TE.tryCatch(
-    async () =>
-      collection.watch(
+    async () => {
+      // eslint-disable-next-line functional/no-let
+      let params:
+        | { fullDocument: string }
+        | { fullDocument: string; resumeAfter: { _data: unknown } } = {
+        fullDocument: "updateLookup",
+      };
+
+      if (resumeToken !== undefined) {
+        params = {
+          ...params,
+          resumeAfter: {
+            _data: new Binary(Buffer.from(resumeToken, "base64")),
+          },
+        };
+      }
+      return collection.watch(
         [
           {
-            $match: { operationType: { $in: ["insert", "update", "replace"] } },
+            $match: {
+              operationType: { $in: ["insert", "update", "replace"] },
+            },
           },
           { $project: { _id: 1, fullDocument: 1, ns: 1, documentKey: 1 } },
         ],
-        { fullDocument: "updateLookup" }
-      ),
+        params
+      );
+    },
     (reason) =>
       new Error(
         `Impossible to watch the ${collection.namespace} collection: " ${reason}`
+      )
+  );
+
+export const findLastToken = <T>(
+  collection: Collection<T>
+): TE.TaskEither<Error, ResumeToken> =>
+  TE.tryCatch(
+    async () => {
+      const myDocument = await collection
+        .find<ResumeToken>({})
+        .sort({ _id: -1 })
+        .limit(1)
+        .tryNext();
+      if (myDocument) {
+        return myDocument;
+      }
+      return null;
+    },
+    (reason) =>
+      new Error(
+        `Impossible to get the last inserted document from collection: " ${reason}`
       )
   );
 

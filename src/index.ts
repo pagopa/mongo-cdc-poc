@@ -13,12 +13,6 @@ import express, { Request, Response } from "express";
 import * as E from "fp-ts/Either";
 import * as TE from "fp-ts/lib/TaskEither";
 import { pipe } from "fp-ts/lib/function";
-import {
-  ConsumerConfig,
-  EachMessagePayload,
-  Kafka,
-  KafkaConfig,
-} from "kafkajs";
 import { ChangeStreamDocument, Db, MongoClient } from "mongodb";
 import { CosmosDBConfig, EH_CONFIG, MONGO_CONFIG } from "./config/config";
 import { transform } from "./mapper/students";
@@ -123,30 +117,32 @@ const sendMessageEventHub =
 
 const app = express();
 
-app.get("/", (req: Request, res: Response) => async () => {
-  const config: ConsumerConfig = {
-    groupId: "",
-  };
-  const kafkaConfig: KafkaConfig = {
-    brokers: [],
-  };
-  const consumer = new Kafka(kafkaConfig).consumer(config);
-  await consumer.connect();
-  // eslint-disable-next-line functional/no-let
-  let messages: string[] = [];
-  await consumer.run({
-    eachMessage: async ({ topic, partition, message }: EachMessagePayload) => {
-      console.log({
-        value: message.value?.toString(),
-        topic,
-        partition,
-      });
-      messages = [...messages, message.value?.toString()];
-    },
-  });
-  await consumer.disconnect();
-  return res.status(200).send({ "Messages Read": messages });
-});
+app.get(
+  "/",
+  (req: Request, res: Response) => async () =>
+    // const config: ConsumerConfig = {
+    //   groupId: "",
+    // };
+    // const kafkaConfig: KafkaConfig = {
+    //   brokers: [],
+    // };
+    // const consumer = new Kafka(kafkaConfig).consumer(config);
+    // await consumer.connect();
+    // // eslint-disable-next-line functional/no-let
+    // let messages: string[] = [];
+    // await consumer.run({
+    //   eachMessage: async ({ topic, partition, message }: EachMessagePayload) => {
+    //     console.log({
+    //       value: message.value?.toString(),
+    //       topic,
+    //       partition,
+    //     });
+    //     messages = [...messages, message.value?.toString()];
+    //   },
+    // });
+    // await consumer.disconnect();
+    res.status(200).send("Messages Read")
+);
 const main = () =>
   pipe(
     TE.Do,

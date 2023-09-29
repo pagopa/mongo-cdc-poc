@@ -18,7 +18,7 @@ import { CosmosDBConfig, EH_CONFIG, MONGO_CONFIG } from "./config/config";
 import { transform } from "./mapper/students";
 import { Student } from "./model/student";
 
-import { Id } from "./model/resumeToken";
+import { Id } from "./model/resume-token";
 import {
   disconnectMongo,
   findLastToken,
@@ -108,7 +108,10 @@ const sendMessageEventHub =
     void pipe(
       change,
       transform,
-      (students) => sendMessages(messagingClient)(students)(),
+      (students) => {
+        console.log("Sending message to Event Hub", students);
+        return sendMessages(messagingClient)(students)();
+      },
       mongoInsertOne(db.collection(resumeToken), {
         // eslint-disable-next-line no-underscore-dangle
         resumeToken: JSON.stringify((change._id as Id)._data),
@@ -166,11 +169,7 @@ const main = () =>
       pipe(
         findLastToken(db.collection("resumeToken")),
         TE.chain((resumeToken) =>
-          watchMongoCollection(
-            collection,
-            // eslint-disable-next-line no-underscore-dangle
-            resumeToken.resumeToken
-          )
+          watchMongoCollection(collection, resumeToken?.resumeToken)
         ),
         TE.chain((watcher) =>
           setMongoListenerOnEventChange(

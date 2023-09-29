@@ -11,7 +11,7 @@ import {
   MongoClient,
   OptionalUnlessRequiredId,
 } from "mongodb";
-import { ResumeToken } from "../model/resumeToken";
+import { ResumeToken } from "../model/resume-token";
 
 export const mongoConnect = (uri: string): TE.TaskEither<Error, MongoClient> =>
   TE.tryCatch(
@@ -86,7 +86,14 @@ export const watchMongoCollection = <T = Document>(
               operationType: { $in: ["insert", "update", "replace"] },
             },
           },
-          { $project: { _id: 1, fullDocument: 1, ns: 1, documentKey: 1 } },
+          {
+            $project: {
+              _id: 1,
+              fullDocument: 1,
+              ns: 1,
+              documentKey: 1,
+            },
+          },
         ],
         params
       );

@@ -27,7 +27,12 @@ const insertTransformer: Transformer = <T = Document>(
     }),
     O.fold(
       () => [],
-      (data) => A.of(data as unknown as Student)
+      (data) => {
+        const student = data as unknown as Student;
+        // eslint-disable-next-line functional/immutable-data
+        student.timestamp = data.clusterTime?.toString();
+        return A.of(student);
+      }
     )
   );
 // const deleteTransformer: Transformer = (data) => { ... };

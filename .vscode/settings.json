@@ -3,6 +3,6 @@
     "**/.yarn": true,
     "**/.pnp.*": true
   },
-  "eslint.nodePath": ".yarn/sdks",
-  "prettier.prettierPath": ".yarn/sdks/prettier/index.js"
+  "appService.defaultWebAppToDeploy": "RESOURCE_ID_OF_YOUR_WEB_APP",
+  "appService.deploySubpath": "."
 }
